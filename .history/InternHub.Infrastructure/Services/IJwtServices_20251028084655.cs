@@ -1,9 +1,0 @@
-using InternHub.Infrastructure.Services
-
-namespace InternHub.Infrastructure.Services
-{
-    public interface IJwtService
-    {
-        string GenerateToken(ApplicationUser user, ILset<string> roles);
-    }
-}

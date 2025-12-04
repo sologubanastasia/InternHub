@@ -1,6 +1,0 @@
-@InternHub.API_HostAddress = http://localhost:5076
-
-GET {{InternHub.API_HostAddress}}/weatherforecast/
-Accept: application/json
-
-###
