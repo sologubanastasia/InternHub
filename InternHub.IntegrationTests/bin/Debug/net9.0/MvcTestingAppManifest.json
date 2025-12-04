@@ -1,0 +1,6 @@
+{
+  "InternHub.API, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "D:\\InternHub\\InternHub.API",
+  "InternHub.Application, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "D:\\InternHub\\InternHub.Application",
+  "InternHub.Domain, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "D:\\InternHub\\InternHub.Domain",
+  "InternHub.Infrastructure, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "D:\\InternHub\\InternHub.Infrastructure"
+}

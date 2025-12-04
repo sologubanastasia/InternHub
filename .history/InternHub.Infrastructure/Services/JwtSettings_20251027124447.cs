@@ -1,0 +1,1 @@
+namespace InternHub.Infrastructure.Repositories

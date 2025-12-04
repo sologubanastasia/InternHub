@@ -1,0 +1,229 @@
+using InternHub.API;
+using InternHub.Domain.Entities;
+using InternHub.Infrastructure;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using System;
+using System.Linq;
+using System.Threading.Tasks;
+using System.Collections.Generic;
+
+namespace InternHub.IntegrationTests
+{
+    public class CustomWebApplicationFactory : WebApplicationFactory<Program>
+    {
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            builder.ConfigureAppConfiguration((context, configBuilder) =>
+            {
+                configBuilder.AddJsonFile("appsettings.Development.json", optional: false);
+            });
+
+            builder.ConfigureServices(services =>
+            {
+                var descriptor = services.SingleOrDefault(
+                    d => d.ServiceType == typeof(DbContextOptions<InternHubDbContext>));
+                if (descriptor != null)
+                    services.Remove(descriptor);
+
+                var sp = services.BuildServiceProvider();
+                var config = sp.GetRequiredService<IConfiguration>();
+                var connectionString = config.GetConnectionString("DefaultConnection");
+
+                services.AddDbContext<InternHubDbContext>(options =>
+                    options.UseNpgsql(connectionString));
+
+                services.AddAuthentication("Test")
+                    .AddScheme<AuthenticationSchemeOptions, TestAuthHandler>("Test", options => { });
+
+                services.PostConfigure<Microsoft.AspNetCore.Authentication.AuthenticationOptions>(options =>
+                {
+                    options.DefaultAuthenticateScheme = "Test";
+                    options.DefaultChallengeScheme = "Test";
+                });
+
+                var sp2 = services.BuildServiceProvider();
+                using var scope = sp2.CreateScope();
+                var scopedServices = scope.ServiceProvider;
+
+                var db = scopedServices.GetRequiredService<InternHubDbContext>();
+                var userManager = scopedServices.GetRequiredService<UserManager<ApplicationUser>>();
+                var roleManager = scopedServices.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
+
+                db.Database.EnsureDeleted();
+                db.Database.Migrate();
+
+                SeedRolesAsync(roleManager).GetAwaiter().GetResult();
+                SeedTestDataAsync(userManager, db).GetAwaiter().GetResult();
+            });
+        }
+        
+        public InternHubDbContext GetDbContext()
+        {
+            var scope = Services.CreateScope();
+            return scope.ServiceProvider.GetRequiredService<InternHubDbContext>();
+        }
+
+        private static async Task SeedRolesAsync(RoleManager<IdentityRole<Guid>> roleManager)
+        {
+            var roles = new[] { RoleConstants.Admin, RoleConstants.Company, RoleConstants.Candidate };
+            foreach (var role in roles)
+            {
+                if (await roleManager.FindByNameAsync(role) == null)
+                    await roleManager.CreateAsync(new IdentityRole<Guid>(role));
+            }
+        }
+
+        private static async Task SeedTestDataAsync(UserManager<ApplicationUser> userManager, InternHubDbContext db)
+        {
+            var candidateUserId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+            var candidate = new ApplicationUser
+            {
+                Id = candidateUserId,
+                UserName = "candidate@test.com",
+                Email = "candidate@test.com",
+                Name = "John",
+                Surname = "Doe",
+                EmailConfirmed = true
+            };
+
+            if (await userManager.FindByEmailAsync(candidate.Email) == null)
+            {
+                await userManager.CreateAsync(candidate, "Password123!");
+                await userManager.AddToRoleAsync(candidate, RoleConstants.Candidate);
+                db.Candidates.Add(new Candidate { Id = candidateUserId, UserId = candidateUserId, Email = candidate.Email, GitHubUrl = "https://github.com/test" });
+            }
+
+            var companyUserId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+            var companyUser = new ApplicationUser
+            {
+                Id = companyUserId,
+                UserName = "company@test.com",
+                Email = "company@test.com",
+                Name = "Jane",
+                Surname = "Smith",
+                EmailConfirmed = true
+            };
+
+            if (await userManager.FindByEmailAsync(companyUser.Email) == null)
+            {
+                await userManager.CreateAsync(companyUser, "Password123!");
+                await userManager.AddToRoleAsync(companyUser, RoleConstants.Company);
+            }
+            if (!db.Companies.Any(c => c.UserId == companyUserId))
+            {
+                db.Companies.Add(new Company
+                {
+                    Id = companyUserId,
+                    UserId = companyUserId,
+                    CompanyName = "Test Company",
+                    Email = companyUser.Email,
+                    Status = CompanyStatus.WaitingForAdminApproval
+                });
+            }
+            
+            if (!db.Jobs.Any())
+            {
+                db.Jobs.Add(new Job
+                {
+                    Id = Guid.Parse("44444444-4444-4444-4444-444444444444"),
+                    Title = "Test Job",
+                    Requirements = "C#, SQL, .NET",
+                    CompanyId = companyUserId
+                });
+            }
+
+            var ownerCandidateId = TestData.OwnerCandidateId;
+            var memberCandidateId = TestData.MemberCandidateId;
+            var nonMemberCandidateId = TestData.NonMemberCandidateId;
+
+            var ownerUser = new ApplicationUser { Id = ownerCandidateId, UserName = "owner@test.com", Email = "owner@test.com", EmailConfirmed = true, Name = "Owner", Surname = "User" };
+            if (await userManager.FindByEmailAsync(ownerUser.Email) == null)
+            {
+                await userManager.CreateAsync(ownerUser, "Password123!");
+                await userManager.AddToRoleAsync(ownerUser, RoleConstants.Candidate);
+                db.Candidates.Add(new Candidate { Id = ownerCandidateId, UserId = ownerCandidateId, Email = ownerUser.Email });
+            }
+
+            var memberUser = new ApplicationUser { Id = memberCandidateId, UserName = "member@test.com", Email = "member@test.com", EmailConfirmed = true, Name = "Member", Surname = "User" };
+            if (await userManager.FindByEmailAsync(memberUser.Email) == null)
+            {
+                await userManager.CreateAsync(memberUser, "Password123!");
+                await userManager.AddToRoleAsync(memberUser, RoleConstants.Candidate);
+                db.Candidates.Add(new Candidate { Id = memberCandidateId, UserId = memberCandidateId, Email = memberUser.Email });
+            }
+
+            var nonMemberUser = new ApplicationUser { Id = nonMemberCandidateId, UserName = "nonmember@test.com", Email = "nonmember@test.com", EmailConfirmed = true, Name = "NonMember", Surname = "User" };
+            if (await userManager.FindByEmailAsync(nonMemberUser.Email) == null)
+            {
+                await userManager.CreateAsync(nonMemberUser, "Password123!");
+                await userManager.AddToRoleAsync(nonMemberUser, RoleConstants.Candidate);
+                db.Candidates.Add(new Candidate { Id = nonMemberCandidateId, UserId = nonMemberCandidateId, Email = nonMemberUser.Email });
+            }
+
+            if (!db.Technologies.Any(t => t.Id == TestData.ExistingTech1Id))
+            {
+                db.Technologies.AddRange(
+                    new Technology { Id = TestData.ExistingTech1Id, Name = "C#" },
+                    new Technology { Id = TestData.ExistingTech2Id, Name = "Azure" }
+                );
+            }
+
+            if (!db.Projects.Any(p => p.Id == TestData.ProjectIdForDetails))
+            {
+                db.Projects.Add(new Project
+                {
+                    Id = TestData.ProjectIdForDetails,
+                    CandidateId = ownerCandidateId,
+                    Name = "Details Project",
+                    Description = "Project for testing details retrieval.",
+                    ProjectTechnologies = new List<ProjectTechnology>
+                    {
+                        new ProjectTechnology { TechnologyId = TestData.ExistingTech1Id }
+                    },
+                    ProjectMembers = new List<ProjectMember>
+                    {
+                        new ProjectMember { ProjectId = TestData.ProjectIdForDetails, CandidateId = ownerCandidateId, Role = "Owner" },
+                        new ProjectMember { ProjectId = TestData.ProjectIdForDetails, CandidateId = memberCandidateId, Role = "Dev" }
+                    }
+                });
+
+                db.Projects.Add(new Project
+                {
+                    Id = TestData.ProjectIdForUpdate,
+                    CandidateId = ownerCandidateId,
+                    Name = "Update Project",
+                    Description = "Project for testing updates.",
+                    ProjectTechnologies = new List<ProjectTechnology>
+                    {
+                        new ProjectTechnology { TechnologyId = TestData.ExistingTech2Id }
+                    },
+                    ProjectMembers = new List<ProjectMember>
+                    {
+                        new ProjectMember { ProjectId = TestData.ProjectIdForUpdate, CandidateId = ownerCandidateId, Role = "Owner" }
+                    }
+                });
+
+                db.Projects.Add(new Project
+                {
+                    Id = TestData.ProjectIdForMemberRemoval,
+                    CandidateId = ownerCandidateId,
+                    Name = "Removal Project",
+                    Description = "Project for testing member removal.",
+                    ProjectMembers = new List<ProjectMember>
+                    {
+                        new ProjectMember { ProjectId = TestData.ProjectIdForMemberRemoval, CandidateId = ownerCandidateId, Role = "Owner" },
+                        new ProjectMember { ProjectId = TestData.ProjectIdForMemberRemoval, CandidateId = memberCandidateId, Role = "Junior Dev" }
+                    }
+                });
+            }
+            
+            await db.SaveChangesAsync();
+        }
+    }
+}

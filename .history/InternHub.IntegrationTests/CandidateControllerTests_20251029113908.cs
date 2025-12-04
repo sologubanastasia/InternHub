@@ -1,0 +1,42 @@
+﻿using InternHub.Application.DTO.Candidate;
+using System.Net.Http.Json;
+using System.Threading.Tasks;
+using Xunit;
+
+namespace InternHub.IntegrationTests
+{
+    [Collection("Sequential")]
+    public class CandidateControllerTests : IClassFixture<CustomWebApplicationFactory>
+    {
+        private readonly HttpClient _client;
+
+        public CandidateControllerTests(CustomWebApplicationFactory factory)
+        {
+            _client = factory.CreateClient();
+        }
+
+        [Fact]
+        public async Task GetProfile_ReturnsOk()
+        {
+            var response = await _client.GetAsync("/api/profile");
+            response.EnsureSuccessStatusCode();
+
+            var profile = await response.Content.ReadFromJsonAsync<UpdateCandidateDto>();
+            Assert.NotNull(profile);
+        }
+
+        [Fact]
+        public async Task UpdateProfile_ReturnsNoContent()
+        {
+            var dto = new UpdateCandidateDto
+            {
+                Name = "UpdatedName",
+                Surname = "UpdatedSurname",
+                GitHubUrl = "https://github.com/updated"
+            };
+
+            var response = await _client.PutAsJsonAsync("/api/profile", dto);
+            Assert.Equal(System.Net.HttpStatusCode.NoContent, response.StatusCode);
+        }
+    }
+}

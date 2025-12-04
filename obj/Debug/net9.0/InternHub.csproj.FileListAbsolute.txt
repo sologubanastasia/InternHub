@@ -1,0 +1,5 @@
+D:\InternHub\obj\Debug\net9.0\InternHub.csproj.AssemblyReference.cache
+D:\InternHub\obj\Debug\net9.0\InternHub.GeneratedMSBuildEditorConfig.editorconfig
+D:\InternHub\obj\Debug\net9.0\InternHub.AssemblyInfoInputs.cache
+D:\InternHub\obj\Debug\net9.0\InternHub.AssemblyInfo.cs
+D:\InternHub\obj\Debug\net9.0\InternHub.csproj.CoreCompileInputs.cache
